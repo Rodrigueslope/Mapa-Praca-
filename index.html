@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel Digital Twin - Praça da Independência</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        body {
+            margin: 0;
+            background: #151c21;
+            overflow: hidden;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        #map {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+        .info-panel {
+            position: absolute;
+            top: 50px; left: 40px;
+            background: #202930dd;
+            border: 2px solid #13d2fa;
+            border-radius: 20px;
+            padding: 30px 30px 30px 30px;
+            color: #fff;
+            min-width: 370px;
+            box-shadow: 0 10px 25px #000b;
+            z-index: 10;
+        }
+        .info-panel h2 {
+            color: #13d2fa;
+            margin: 0 0 15px 0;
+            font-size: 1.6em;
+            letter-spacing: 1px;
+        }
+        .info-panel b {
+            color: #23ffa1;
+            font-size: 1.1em;
+        }
+        .floating-dashboard {
+    position: absolute;
+    min-width: 160px;
+    background: linear-gradient(120deg,#181f24 85%,#2c3840 100%);
+    border-radius: 10px;
+    box-shadow: 0 2px 12px #000a;
+    padding: 8px 14px 8px 14px;
+    border: 2px solid #27d8ff;
+    color: #fff;
+    font-size: 0.90em; /* menor fonte geral */
+    z-index: 20;
+    transition: left 0.1s, top 0.1s;
+    pointer-events: none;
+}
+        .person-title {
+    color: #27d8ff;
+    font-weight: bold;
+    font-size: 1em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dashboard-row {
+    display: flex;
+    gap: 8px; /* diminui o espaçamento */
+    justify-content: center;
+}
+
+.dashboard-box {
+    min-width: 54px;
+    border-radius: 6px;
+    padding: 4px 7px 4px 7px;
+    margin: 0 1px;
+    box-shadow: 0 1px 4px #0006;
+}
+
+.dashboard-label {
+    color: #aaa;
+    font-size: 0.90em;
+    font-weight: 500;
+}
+
+.dashboard-value {
+    color: #fff;
+    font-weight: bold;
+    font-size: 1.03em;
+}
+        .person-marker {
+            width: 48px; height: 48px;
+            border: none;
+            background: none;
+            transform: translate(-50%, -90%);
+            z-index: 21;
+        }
+        .person-marker img {
+            width: 48px;
+            height: 48px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px #0009;
+            background: none;
+        }
+        @media (max-width: 600px) {
+            .info-panel { min-width: 94vw; left: 2vw !important; padding: 20px 5vw; }
+            .floating-dashboard { min-width: 72vw; left: 14vw !important; }
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div class="info-panel">
+    <h2>Praça da Independência</h2>
+    <div><b>Tráfego:</b> Moderado</div>
+    <div><b>Temperatura:</b> 28°C</div>
+    <div><b>Umidade:</b> 74%</div>
+    <div><b>Postes inteligentes:</b> 12 ativos</div>
+</div>
+<div class="floating-dashboard" id="dash-person">
+    <span class="person-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" fill="#27d8ff" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2c0-2.5 4-4 8-4s8 1.5 8 4v2"/></svg>
+        Pessoa Andando
+    </span>
+    <div class="dashboard-row">
+        <div class="dashboard-box">
+            <div class="dashboard-label">Status</div>
+            <div class="dashboard-value" id="status-person">Andando</div>
+        </div>
+        <div class="dashboard-box">
+            <div class="dashboard-label">Velocidade</div>
+            <div class="dashboard-value" id="veloc-person">2,0 km/h</div>
+        </div>
+        <div class="dashboard-box">
+            <div class="dashboard-label">Posição</div>
+            <div class="dashboard-value" id="pos-person">-</div>
+        </div>
+    </div>
+</div>
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoicmJpbSIsImEiOiJjbWNzYzN1a3AxMTU3MmpxMHljOGV3djZzIn0._2DZl5dTlFkpm2zVQio_kQ';
+
+const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/rbim/cmctrgzlz00tm01s4cbzwc7b9',
+    center: [-34.870994, -7.118980],
+    zoom: 18.2,
+    pitch: 55,
+    bearing: 24,
+    antialias: true
+});
+
+map.on('load', () => {
+    // Caminho reto da pessoa andando pela Av. Presidente Epitácio Pessoa
+    const path = [
+        [-34.870955, -7.118932],
+        [-34.870833, -7.119334],
+        [-34.870788, -7.119600],
+        [-34.870687, -7.119800]
+    ];
+    let pos = 0, dir = 1;
+
+    // Marker customizado com imagem enviada
+    const personEl = document.createElement('div');
+    personEl.className = 'person-marker';
+    personEl.innerHTML = `<img src="model.png" alt="Pessoa andando">`;
+    const personMarker = new mapboxgl.Marker(personEl).setLngLat(path[0]).addTo(map);
+
+    // Painel dashboard flutuante acompanha o marcador
+    const dash = document.getElementById('dash-person');
+
+    function movePerson() {
+        pos += dir * 0.004;
+        if (pos > path.length - 1) { dir = -1; pos = path.length - 1; }
+        if (pos < 0) { dir = 1; pos = 0; }
+        // Interpola posição
+        let idx = Math.floor(pos), frac = pos - idx;
+        let lng = path[idx][0] + frac * (path[idx+1]?.[0] - path[idx][0] || 0);
+        let lat = path[idx][1] + frac * (path[idx+1]?.[1] - path[idx][1] || 0);
+        personMarker.setLngLat([lng, lat]);
+        // Atualiza painel
+        document.getElementById('pos-person').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        let vel = (1.1 + Math.random() * 0.1).toFixed(1);
+        document.getElementById('veloc-person').textContent = `${vel} km/h`;
+        // Projeta a posição para tela
+        const p = map.project([lng, lat]);
+        dash.style.left = (p.x - dash.offsetWidth / 2 + 8) + 'px';
+        dash.style.top = (p.y - 120) + 'px';
+        setTimeout(movePerson, 60);
+    }
+    movePerson();
+
+    // Atualiza painel na rotação e zoom
+    map.on('move', () => {
+        const lngLat = personMarker.getLngLat();
+        const p = map.project([lngLat.lng, lngLat.lat]);
+        dash.style.left = (p.x - dash.offsetWidth / 2 + 8) + 'px';
+        dash.style.top = (p.y - 120) + 'px';
+    });
+});
+</script>
+</body>
+</html>
